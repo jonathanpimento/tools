@@ -431,22 +431,28 @@
             // Add function to load a single sample track
             async function loadSampleTrack(trackName, fileName) {
                 try {
-                    const response = await fetch(`audio/${fileName}`);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const arrayBuffer = await response.arrayBuffer();
-                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                    // Changed path to look in the same directory as the HTML
+                    const response = await fetch(fileName);
+                    if (!response.ok) {
+                        throw new Error(`Failed to load ${fileName} (${response.status} ${response.statusText})`);
+                    }
                     
+                    const arrayBuffer = await response.arrayBuffer();
+                    if (arrayBuffer.byteLength === 0) {
+                        throw new Error(`${fileName} is empty`);
+                    }
+
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
                     tracks[trackName].file = audioBuffer;
                     document.getElementById(`${trackName}FileName`).textContent = fileName;
                     
-                    // Update duration to the longest track
                     duration = Math.max(duration, audioBuffer.duration);
                     updateTimeDisplay(0, duration);
                     
                     return true;
                 } catch (error) {
                     console.error(`Error loading ${fileName}:`, error);
-                    document.getElementById(`${trackName}FileName`).textContent = 'Error loading file';
+                    document.getElementById(`${trackName}FileName`).textContent = `Error: ${error.message}`;
                     return false;
                 }
             }
