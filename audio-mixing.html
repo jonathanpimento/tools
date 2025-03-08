@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Mixing Tool</title>
+        <!-- Favicon Configuration -->
+        <link rel="icon" type="image/x-icon" href="../assets/favicon.ico">
+        <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16x16.png">
+    <!-- External CSS -->
+    <link rel="stylesheet" href="tools.css">
+</head>
+<body>
+    <!-- Hero Section - Main landing area -->
+    <div class="hero">
+        <div class="hero-content">
+            <div class="hero-label">Audio Mixing Tool</div>
+            <h1 class="hero-title">
+                Compare audio quality with seamless A/B switching           
+            </h1>
+            <p class="hero-description">
+                This tool generates a single track that seamlessly alternates between the original and enhanced versions every five seconds, making it easy to pinpoint improvements at a glance. Perfect for engineers, researchers, and audio enthusiasts looking to hear the difference instantly.            </p>
+            <a href="#app" class="hero-button">Mix Audio <span class="arrow">→</span></a>
+        </div>
+        <div class="hero-image">
+            <img src="../assets/ai-bg-1.png" alt="Audio Mixing Tool Interface">
+        </div>
+    </div>
+
+    <!-- Sample Files Banner - Quick start option -->
+    <div class="sample-files-banner" id="app">
+        <span>Upload the original and <a href="https://podcast.adobe.com/enhance">enhanced audio tracks</a> you want to mix or try the sample tracks.</span>
+        <button class="sample-files-button" id="sample-files-button">
+            <i class="fa-solid fa-bolt"></i>
+            Try Sample Tracks
+        </button>
+    </div>
+
+    <!-- Main Upload Container -->
+    <div class="container">
+        <!-- Original Audio Upload Section -->
+        <div class="column">
+            <h2>Upload Original Audio</h2>
+            <div class="upload-area" id="original-upload">
+                <p>Drop your audio file here or click to select</p>
+                <input type="file" id="original-input" accept=".mp3,.wav" style="display: none">
+            </div>
+            <div class="preview" id="original-preview"></div>
+            <div class="file-info" id="original-info"></div>
+        </div>
+        
+        <!-- Enhanced Audio Upload Section -->
+        <div class="column">
+            <h2>Upload Enhanced Audio</h2>
+            <div class="upload-area" id="enhanced-upload">
+                <p>Drop your audio file here or click to select</p>
+                <input type="file" id="enhanced-input" accept=".mp3,.wav" style="display: none">
+            </div>
+            <div class="preview" id="enhanced-preview"></div>
+            <div class="file-info" id="enhanced-info"></div>
+        </div>
+    </div>
+
+    <!-- Mix Audio Button -->
+    <button id="mix-button" class="mix-button" disabled>Mix Audio</button>
+
+    <!-- Mixed Audio Section -->
+    <div class="mixed-section">
+        <h2>Your Mixed Track Is Ready</h2>
+        <p class="project-description">
+            The combined audio file will display a text overlay to indicate when the original and enhanced segments are playing in addition to the duration where you can see it switch every 5 secs. Click create video to save this as a video with the combined audio and text overlays.
+        </p>
+        
+        <!-- Audio Preview Area -->
+        <div class="mixed-preview" id="mixed-preview">
+            <div class="segment-overlay" id="segment-overlay" style="display: none;"></div>
+            <div class="timestamp" id="timestamp"></div>
+            <audio id="mixed-audio" controls></audio>
+        </div>
+        
+        <!-- Video Generation Section -->
+        <div class="download-section">
+            <canvas id="videoCanvas" width="1280" height="720"></canvas>
+            <video id="video-preview" controls></video>
+            <div class="progress-bar" id="progress-bar">
+                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            </div>
+            <button id="download-button" class="download-button" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Generate Video
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="modern-footer">
+        <div class="footer-column">
+            <h3>Audio Mixing</h3>
+            <p>
+                Built with Claude + using the Web Audio API for precise audio manipulation, AudioContext for real-time processing, and MediaRecorder API for output generation.
+            </p>
+        </div>
+                
+        <div class="footer-column">
+            <h3>About the tool</h3>
+            <p>
+                Built primarily to speed up the evaluation process, where the team needed to compare the enhanced verision against the original track to determine model readiness and quality.
+            </p>
+        </div>
+
+        <div class="footer-column">
+            <h3>Jonathan Pimento</h3>
+            <p class="copy-text">I enjoy exploring generative AI—experimenting with new ways to create, building personal tools, and pushing the boundaries of what's possible. You can find more of my work <a href="http://www.jonathanpimento.com">here</a>.
+            </p>
+        </div>
+    </footer>
+    
+
+    <!-- External Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg.js/0.10.0/ffmpeg.min.js"></script>
+    <script>
+    let originalAudio = null;
+    let enhancedAudio = null;
+    const mixButton = document.getElementById('mix-button');
+    const segmentOverlay = document.getElementById('segment-overlay');
+    const timestampDiv = document.getElementById('timestamp');
+    const downloadButton = document.getElementById('download-button');
+    const progressBar = document.getElementById('progress-bar');
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const videoPreview = document.getElementById('video-preview');
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const SEGMENT_DURATION = 5; // seconds
+
+    // First, add this style to hide the mixed section initially
+    document.querySelector('.mixed-section').style.display = 'none';
+
+    // Move handleFile outside of setupUpload and make it a global function
+    function handleFile(file, isOriginal) {
+        if (!file) return;
+        
+        // Check if file type is mp3 or wav
+        const validTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav'];
+        if (!validTypes.includes(file.type)) {
+            alert('Please upload an MP3 or WAV file only.');
+            return;
+        }
+        
+        const audioElement = document.createElement('audio');
+        audioElement.controls = true;
+        audioElement.src = URL.createObjectURL(file);
+        
+        const preview = document.getElementById(isOriginal ? 'original-preview' : 'enhanced-preview');
+        const info = document.getElementById(isOriginal ? 'original-info' : 'enhanced-info');
+        
+        if (isOriginal) {
+            originalAudio = audioElement;
+        } else {
+            enhancedAudio = audioElement;
+        }
+        
+        preview.innerHTML = '';
+        preview.appendChild(audioElement);
+        info.textContent = `File: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+        
+        checkEnableMixButton();
+    }
+
+    function setupUpload(inputId, uploadAreaId, previewId, infoId, isOriginal) {
+        const input = document.getElementById(inputId);
+        const uploadArea = document.getElementById(uploadAreaId);
+        
+        uploadArea.addEventListener('click', () => input.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#666';
+            uploadArea.style.backgroundColor = '#f8f8f8';
+        });
+        
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#ccc';
+            uploadArea.style.backgroundColor = '';
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#ccc';
+            uploadArea.style.backgroundColor = '';
+            handleFile(e.dataTransfer.files[0], isOriginal);
+        });
+        
+        input.addEventListener('change', (e) => {
+            handleFile(e.target.files[0], isOriginal);
+        });
+    }
+
+    function checkEnableMixButton() {
+        mixButton.disabled = !(originalAudio && enhancedAudio);
+    }
+
+    async function createMixedAudio() {
+        try {
+            const audioContext = new AudioContext();
+            const originalBuffer = await fetchAudioBuffer(originalAudio.src, audioContext);
+            const enhancedBuffer = await fetchAudioBuffer(enhancedAudio.src, audioContext);
+
+            // Use single channel (mono) for simplicity
+            const duration = Math.min(originalBuffer.duration, enhancedBuffer.duration);
+            const numSegments = Math.floor(duration / SEGMENT_DURATION);
+            const finalDuration = numSegments * SEGMENT_DURATION;
+            
+            // Create a mono output buffer
+            const mixedBuffer = audioContext.createBuffer(
+                1, // mono
+                audioContext.sampleRate * finalDuration,
+                audioContext.sampleRate
+            );
+
+            // Get the first channel from each buffer
+            const mixedData = mixedBuffer.getChannelData(0);
+            const originalData = originalBuffer.getChannelData(0);
+            const enhancedData = enhancedBuffer.getChannelData(0);
+
+            // Mix the segments
+            for (let segment = 0; segment < numSegments; segment++) {
+                const startSample = segment * SEGMENT_DURATION * audioContext.sampleRate;
+                const endSample = (segment + 1) * SEGMENT_DURATION * audioContext.sampleRate;
+                const sourceData = segment % 2 === 0 ? originalData : enhancedData;
+
+                for (let i = startSample; i < endSample; i++) {
+                    mixedData[i] = sourceData[i];
+                }
+            }
+
+            // Convert to WAV and create URL
+            const mixedAudioData = await audioBufferToWave(mixedBuffer);
+            const mixedBlob = new Blob([mixedAudioData], { type: 'audio/wav' });
+            return URL.createObjectURL(mixedBlob);
+        } catch (error) {
+            console.error('Error in createMixedAudio:', error);
+            throw error;
+        }
+    }
+
+    async function fetchAudioBuffer(url, audioContext) {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return await audioContext.decodeAudioData(arrayBuffer);
+    }
+
+    function audioBufferToWave(audioBuffer) {
+        const numOfChan = audioBuffer.numberOfChannels;
+        const length = audioBuffer.length * numOfChan * 2;
+        const buffer = new ArrayBuffer(44 + length);
+        const view = new DataView(buffer);
+        const channels = [];
+        let sample;
+        let offset = 0;
+        let pos = 0;
+
+        // Write WAV header
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + length, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numOfChan, true);
+        view.setUint32(24, audioBuffer.sampleRate, true);
+        view.setUint32(28, audioBuffer.sampleRate * 2 * numOfChan, true);
+        view.setUint16(32, numOfChan * 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, length, true);
+
+        // Write interleaved data
+        for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+            channels.push(audioBuffer.getChannelData(i));
+        }
+
+        while (pos < audioBuffer.length) {
+            for (let i = 0; i < numOfChan; i++) {
+                sample = Math.max(-1, Math.min(1, channels[i][pos]));
+                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+                view.setInt16(44 + offset, sample, true);
+                offset += 2;
+            }
+            pos++;
+        }
+
+        return buffer;
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    function drawFrame(time, duration) {
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Clear canvas
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Calculate which segment we're in
+        const segment = Math.floor(time / SEGMENT_DURATION);
+        const isOriginalSegment = segment % 2 === 0;
+        
+        // Draw segment text
+        ctx.fillStyle = isOriginalSegment ? '#cb5b5b' : '#5bcba3';
+        ctx.fillRect(0, 0, width, 120);
+        
+        ctx.font = 'bold 48px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+            isOriginalSegment ? 'Original Audio' : 'Enhanced Audio',
+            width / 2,
+            70
+        );
+        
+        // Draw timestamp
+        ctx.font = '32px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(
+            `Time: ${time.toFixed(1)}s / ${duration.toFixed(1)}s`,
+            width / 2,
+            height - 180
+        );
+        
+    }
+
+    async function createVideo() {
+        const mixedAudio = document.getElementById('mixed-audio');
+        if (!mixedAudio.src) return;
+
+        downloadButton.disabled = true;
+        downloadButton.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Creating Video...
+        `;
+        progressBar.style.display = 'block';
+        videoPreview.style.display = 'none';
+
+        try {
+            const duration = mixedAudio.duration;
+            const fps = 30;
+            const totalFrames = Math.ceil(duration * fps);
+            const chunks = [];
+            
+            const stream = canvas.captureStream(fps);
+            
+            // Add audio track to the stream
+            const audioContext = new AudioContext();
+            const audioSource = audioContext.createMediaElementSource(mixedAudio);
+            const audioDestination = audioContext.createMediaStreamDestination();
+            audioSource.connect(audioDestination);
+            
+            // Combine video and audio streams
+            const combinedStream = new MediaStream([
+                ...stream.getVideoTracks(),
+                ...audioDestination.stream.getAudioTracks()
+            ]);
+            
+            const mediaRecorder = new MediaRecorder(combinedStream, {
+                mimeType: 'video/webm;codecs=vp9',
+                videoBitsPerSecond: 5000000 // 5 Mbps for better quality
+            });
+
+            mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+            
+            mediaRecorder.onstop = async () => {
+                const finalVideo = new Blob(chunks, { type: 'video/webm' });
+                
+                // Create and trigger download
+                const a = document.createElement('a');
+                const url = URL.createObjectURL(finalVideo);
+                a.href = url;
+                a.download = 'mixed-audio-video.webm';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                // Update video preview
+                videoPreview.src = URL.createObjectURL(finalVideo);
+                videoPreview.style.display = 'block';
+                
+                // Reset button state
+                downloadButton.disabled = false;
+                downloadButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    Create New Video
+                `;
+                
+                // Cleanup
+                audioSource.disconnect();
+                stream.getTracks().forEach(track => track.stop());
+                combinedStream.getTracks().forEach(track => track.stop());
+            };
+
+            // Start recording process
+            mediaRecorder.start();
+            
+            // Play the audio
+            mixedAudio.currentTime = 0;
+            await mixedAudio.play();
+            
+            // Generate frames while audio plays
+            for (let frame = 0; frame < totalFrames; frame++) {
+                const time = frame / fps;
+                drawFrame(time, duration);
+                progressBarFill.style.width = `${(frame / totalFrames) * 100}%`;
+                await new Promise(resolve => setTimeout(resolve, 1000 / fps));
+            }
+            
+            // Stop recording
+            mediaRecorder.stop();
+            mixedAudio.pause();
+            mixedAudio.currentTime = 0;
+
+        } catch (error) {
+            console.error('Error creating video:', error);
+            alert('Error creating video. Please try again.');
+            downloadButton.disabled = false;
+            downloadButton.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Create Video
+            `;
+        }
+    }
+
+    function updateOverlay(currentTime) {
+        const segment = Math.floor(currentTime / SEGMENT_DURATION);
+        const isOriginalSegment = segment % 2 === 0;
+        
+        segmentOverlay.textContent = isOriginalSegment ? 'Original Audio' : 'Enhanced Audio';
+        segmentOverlay.className = 'segment-overlay ' + (isOriginalSegment ? 'original-segment' : 'enhanced-segment');
+        segmentOverlay.style.display = 'block';
+        
+        timestampDiv.textContent = `Time: ${currentTime.toFixed(1)}s`;
+    }
+
+    // Then modify the mix button click handler to show and scroll to the section
+    mixButton.addEventListener('click', async () => {
+        mixButton.disabled = true;
+        mixButton.textContent = 'Processing...';
+        
+        try {
+            const mixedAudioUrl = await createMixedAudio();
+            const mixedAudio = document.getElementById('mixed-audio');
+            mixedAudio.src = mixedAudioUrl;
+            
+            // Show the mixed section
+            const mixedSection = document.querySelector('.mixed-section');
+            mixedSection.style.display = 'block';
+            
+            // Scroll the section into view
+            mixedSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            mixedAudio.addEventListener('timeupdate', () => {
+                updateOverlay(mixedAudio.currentTime);
+            });
+            
+            mixedAudio.addEventListener('ended', () => {
+                segmentOverlay.style.display = 'none';
+            });
+            
+            mixedAudio.addEventListener('pause', () => {
+                segmentOverlay.style.display = 'none';
+            });
+            
+            mixedAudio.addEventListener('play', () => {
+                updateOverlay(mixedAudio.currentTime);
+            });
+        } catch (error) {
+            console.error('Error mixing audio:', error);
+            alert('Error mixing audio. Please try again.');
+        } finally {
+            mixButton.disabled = false;
+            mixButton.textContent = 'Mix Audio';
+        }
+    });
+
+    const mixedAudio = document.getElementById('mixed-audio');
+    mixedAudio.addEventListener('loadedmetadata', () => {
+        downloadButton.disabled = false;
+        downloadButton.onclick = createVideo;
+        downloadButton.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Create Video
+        `;
+    });
+
+    setupUpload('original-input', 'original-upload', 'original-preview', 'original-info', true);
+    setupUpload('enhanced-input', 'enhanced-upload', 'enhanced-preview', 'enhanced-info', false);
+
+    function loadSampleFiles() {
+        // Create audio elements directly with the sample files
+        const originalAudioElement = document.createElement('audio');
+        const enhancedAudioElement = document.createElement('audio');
+        
+        // Add load event listeners before setting src
+        let loadedCount = 0;
+        const handleLoad = () => {
+            loadedCount++;
+            if (loadedCount === 2) {
+                // Both files loaded successfully
+                originalAudio = originalAudioElement;
+                enhancedAudio = enhancedAudioElement;
+                
+                // Update the preview areas
+                const originalPreview = document.getElementById('original-preview');
+                const enhancedPreview = document.getElementById('enhanced-preview');
+                
+                originalPreview.innerHTML = '';
+                enhancedPreview.innerHTML = '';
+                
+                originalPreview.appendChild(originalAudioElement);
+                enhancedPreview.appendChild(enhancedAudioElement);
+                
+                // Update the file info
+                document.getElementById('original-info').textContent = 'File: sampleA.mp3';
+                document.getElementById('enhanced-info').textContent = 'File: sampleB.mp3';
+                
+                // Enable the mix button
+                checkEnableMixButton();
+            }
+        };
+
+        const handleError = (e) => {
+            console.error('Error loading sample file:', e);
+            alert('Error loading sample files. Please ensure sampleA.mp3 and sampleB.mp3 exist in the same folder as this HTML file.');
+        };
+
+        originalAudioElement.addEventListener('loadeddata', handleLoad);
+        enhancedAudioElement.addEventListener('loadeddata', handleLoad);
+        originalAudioElement.addEventListener('error', handleError);
+        enhancedAudioElement.addEventListener('error', handleError);
+
+        // Set controls and src
+        originalAudioElement.controls = true;
+        enhancedAudioElement.controls = true;
+        originalAudioElement.src = 'sampleA.mp3';
+        enhancedAudioElement.src = 'sampleB.mp3';
+    }
+
+    // Add click handler for the sample files button
+    document.getElementById('sample-files-button').addEventListener('click', loadSampleFiles);
+    </script>
+</body>
+</html>

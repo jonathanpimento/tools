@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stem Mixing Tool</title>
+            <!-- Favicon Configuration -->
+            <link rel="icon" type="image/x-icon" href="../assets/favicon.ico">
+            <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32x32.png">
+            <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16x16.png">
+        <!-- External CSS -->
+        <link rel="stylesheet" href="tools.css">
+    </head>
+    <body>
+        <!-- Hero Section - Main landing area -->
+        <div class="hero">
+            <div class="hero-content">
+                <div class="hero-label">Audio Mixing Tool</div>
+                <h1 class="hero-title">
+                    Blend Speech with Background & Reverb Seamlessly           
+                </h1>
+                <p class="hero-description">
+                    This tool lets you effortlessly mix an enhanced speech track with background audio and reverb, creating a natural, polished sound. Fine-tune the balance to achieve the perfect blend for podcasts, voiceovers, and presentations. Ideal for audio professionals, content creators, and anyone looking to enhance speech clarity while maintaining a rich, immersive atmosphere.
+                    </p>
+
+                    <a href="#app" class="hero-button">Mix Audio <span class="arrow">→</span></a>
+            </div>
+            <div class="hero-image">
+                <img src="../assets/ai-bg-1.png" alt="Audio Mixing Tool Interface">
+            </div>
+        </div>
+    
+        <!-- Sample Files Banner - Quick start option -->
+        <div class="sample-files-banner" id="app">
+            <span>Upload the original and <a href="https://podcast.adobe.com/enhance">enhanced audio tracks</a> you want to mix or try the sample tracks.</span>
+            <button class="sample-files-button" id="sample-files-button">
+                <i class="fa-solid fa-bolt"></i>
+                Try Sample Tracks
+            </button>
+        </div>  
+
+        <div class="mixer-container">
+            <div class="tracks-container">
+                <div class="track">
+                    <h3>Original Speech</h3>
+                    <div class="slider-container">
+                        <input type="range" class="vertical" id="originalVolume" min="0" max="100" value="100">
+                        <span class="volume-value" id="originalVolumeValue">100%</span>
+                    </div>
+                    <div class="file-input-container">
+                        <label for="originalInput" class="file-input-label">Choose File</label>
+                        <input type="file" id="originalInput" accept="audio/*">
+                        <div class="file-name" id="originalFileName">No file chosen</div>
+                    </div>
+                </div>
+
+                <div class="track">
+                    <h3>Enhanced Speech</h3>
+                    <div class="slider-container">
+                        <input type="range" class="vertical" id="enhancedVolume" min="0" max="100" value="100">
+                        <span class="volume-value" id="enhancedVolumeValue">100%</span>
+                    </div>
+                    <div class="file-input-container">
+                        <label for="enhancedInput" class="file-input-label">Choose File</label>
+                        <input type="file" id="enhancedInput" accept="audio/*">
+                        <div class="file-name" id="enhancedFileName">No file chosen</div>
+                    </div>
+                </div>
+
+                <div class="track">
+                    <h3>Background Noise</h3>
+                    <div class="slider-container">
+                        <input type="range" class="vertical" id="noiseVolume" min="0" max="100" value="100">
+                        <span class="volume-value" id="noiseVolumeValue">100%</span>
+                    </div>
+                    <div class="file-input-container">
+                        <label for="noiseInput" class="file-input-label">Choose File</label>
+                        <input type="file" id="noiseInput" accept="audio/*">
+                        <div class="file-name" id="noiseFileName">No file chosen</div>
+                    </div>
+                </div>
+
+                <div class="track">
+                    <h3>Reverb</h3>
+                    <div class="slider-container">
+                        <input type="range" class="vertical" id="reverbVolume" min="0" max="100" value="100">
+                        <span class="volume-value" id="reverbVolumeValue">100%</span>
+                    </div>
+                    <div class="file-input-container">
+                        <label for="reverbInput" class="file-input-label">Choose File</label>
+                        <input type="file" id="reverbInput" accept="audio/*">
+                        <div class="file-name" id="reverbFileName">No file chosen</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="presetContainer">
+                <h3>Presets</h3>
+                <div class="preset-controls">
+                    <input type="text" id="presetName" placeholder="Enter preset name">
+                    <button id="savePreset">Save Current Settings</button>
+                </div>
+                <div class="preset-controls">
+                    <select id="presetSelect">
+                        <option value="">Select a preset...</option>
+                    </select>
+                    <div class="preset-buttons">
+                        <button id="loadPreset">Load Preset</button>
+                        <button id="deletePreset" class="delete-preset">Delete Preset</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="scrubberContainer">
+                <div id="timeDisplay">0:00 / 0:00</div>
+                <input type="range" id="scrubber" min="0" max="1000" value="0">
+            </div>
+
+            <div class="playback-controls">
+                <button id="playButton" disabled>Play All</button>
+                <button id="pauseButton" disabled>Pause</button>
+                <button id="stopButton" disabled>Stop</button>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const audioContext = new(window.AudioContext || window.webkitAudioContext)();
+                let tracks = {
+                    original: {
+                        file: null,
+                        source: null,
+                        gain: null
+                    },
+                    enhanced: {
+                        file: null,
+                        source: null,
+                        gain: null
+                    },
+                    noise: {
+                        file: null,
+                        source: null,
+                        gain: null
+                    },
+                    reverb: {
+                        file: null,
+                        source: null,
+                        gain: null
+                    }
+                };
+
+                // Add sample files button listener
+                document.getElementById('sample-files-button').addEventListener('click', loadSampleFiles);
+
+                // Function to load sample files
+                async function loadSampleFiles() {
+                    // First check if files exist using audio elements
+                    const fileNames = ['speech.wav', 'enhanced.wav', 'background.wav', 'reverb.wav'];
+                    const audioElements = fileNames.map(fileName => {
+                        const audio = document.createElement('audio');
+                        audio.src = fileName;
+                        return audio;
+                    });
+
+                    // Check which files are missing
+                    const missingFiles = [];
+                    for (let i = 0; i < audioElements.length; i++) {
+                        try {
+                            const response = await fetch(fileNames[i], { method: 'HEAD' });
+                            if (!response.ok) {
+                                missingFiles.push(fileNames[i]);
+                            }
+                        } catch (error) {
+                            missingFiles.push(fileNames[i]);
+                        }
+                    }
+
+                    if (missingFiles.length > 0) {
+                        alert(`The following files are missing:\n${missingFiles.join('\n')}\n\nPlease ensure these .wav files are in the same folder as the HTML file.`);
+                        return;
+                    }
+
+                    try {
+                        // Resume audio context if suspended
+                        if (audioContext.state === 'suspended') {
+                            await audioContext.resume();
+                        }
+
+                        // Now load the files we know exist
+                        const buffers = await Promise.all(fileNames.map(async fileName => {
+                            const response = await fetch(fileName);
+                            const arrayBuffer = await response.arrayBuffer();
+                            return await audioContext.decodeAudioData(arrayBuffer);
+                        }));
+
+                        // Store AudioBuffers in tracks
+                        tracks.original.file = buffers[0];
+                        tracks.enhanced.file = buffers[1];
+                        tracks.noise.file = buffers[2];
+                        tracks.reverb.file = buffers[3];
+
+                        // Update duration
+                        duration = Math.max(...buffers.map(buffer => buffer.duration));
+                        updateTimeDisplay(0, duration);
+
+                        // Update UI
+                        document.getElementById('originalFileName').textContent = 'speech.wav';
+                        document.getElementById('enhancedFileName').textContent = 'enhanced.wav';
+                        document.getElementById('noiseFileName').textContent = 'background.wav';
+                        document.getElementById('reverbFileName').textContent = 'reverb.wav';
+
+                        // Enable play button
+                        playButton.disabled = false;
+                        stopButton.disabled = false;
+                        pauseButton.disabled = true;
+
+                    } catch (error) {
+                        console.error('Error loading audio files:', error);
+                        alert('Error processing audio files. Please ensure all files are valid .wav format.');
+                    }
+                }
+
+                // Add file name display functionality
+                function updateFileName(inputElement, fileNameElement) {
+                    const fileName = inputElement.files[0]?.name || 'No file chosen';
+                    document.getElementById(fileNameElement).textContent = fileName;
+                }
+
+                // Update all file input listeners to include filename updates
+                document.getElementById('originalInput').addEventListener('change', (e) => {
+                    handleFileSelect(e, 'original');
+                    updateFileName(e.target, 'originalFileName');
+                });
+                document.getElementById('enhancedInput').addEventListener('change', (e) => {
+                    handleFileSelect(e, 'enhanced');
+                    updateFileName(e.target, 'enhancedFileName');
+                });
+                document.getElementById('noiseInput').addEventListener('change', (e) => {
+                    handleFileSelect(e, 'noise');
+                    updateFileName(e.target, 'noiseFileName');
+                });
+                document.getElementById('reverbInput').addEventListener('change', (e) => {
+                    handleFileSelect(e, 'reverb');
+                    updateFileName(e.target, 'reverbFileName');
+                });
+
+                let presets = {};
+                let startTime = 0;
+                let pausedAt = 0;
+                let isPlaying = false;
+                let duration = 0;
+
+                // Preset Controls
+                const presetNameInput = document.getElementById('presetName');
+                const savePresetButton = document.getElementById('savePreset');
+                const presetSelect = document.getElementById('presetSelect');
+                const loadPresetButton = document.getElementById('loadPreset');
+                const deletePresetButton = document.getElementById('deletePreset');
+
+                // Setup volume controls
+                document.getElementById('originalVolume').addEventListener('input', (e) => updateVolume('original', e.target.value));
+                document.getElementById('enhancedVolume').addEventListener('input', (e) => updateVolume('enhanced', e.target.value));
+                document.getElementById('noiseVolume').addEventListener('input', (e) => updateVolume('noise', e.target.value));
+                document.getElementById('reverbVolume').addEventListener('input', (e) => updateVolume('reverb', e.target.value));
+
+                // Controls
+                const playButton = document.getElementById('playButton');
+                const pauseButton = document.getElementById('pauseButton');
+                const stopButton = document.getElementById('stopButton');
+                const scrubber = document.getElementById('scrubber');
+
+                playButton.addEventListener('click', playAll);
+                pauseButton.addEventListener('click', pauseAll);
+                stopButton.addEventListener('click', stopAll);
+
+                // Scrubber control
+                scrubber.addEventListener('input', handleScrub);
+                scrubber.addEventListener('change', handleScrubEnd);
+
+                // Preset event listeners
+                savePresetButton.addEventListener('click', savePreset);
+                loadPresetButton.addEventListener('click', loadPreset);
+                deletePresetButton.addEventListener('click', deletePreset);
+
+                function savePreset() {
+                    const name = presetNameInput.value.trim();
+                    if (!name) {
+                        alert('Please enter a preset name');
+                        return;
+                    }
+
+                    if (Object.keys(presets).length >= 10 && !presets[name]) {
+                        alert('Maximum 10 presets allowed. Please delete an existing preset first.');
+                        return;
+                    }
+
+                    const volumeLevels = {
+                        original: document.getElementById('originalVolume').value,
+                        enhanced: document.getElementById('enhancedVolume').value,
+                        noise: document.getElementById('noiseVolume').value,
+                        reverb: document.getElementById('reverbVolume').value
+                    };
+
+                    presets[name] = volumeLevels;
+                    updatePresetList();
+                    presetNameInput.value = '';
+                }
+
+                function loadPreset() {
+                    const selectedPreset = presetSelect.value;
+                    if (!selectedPreset || !presets[selectedPreset]) return;
+
+                    const volumes = presets[selectedPreset];
+                    for (const [trackName, value] of Object.entries(volumes)) {
+                        document.getElementById(`${trackName}Volume`).value = value;
+                        updateVolume(trackName, value);
+                    }
+                }
+
+                function deletePreset() {
+                    const selectedPreset = presetSelect.value;
+                    if (!selectedPreset || !presets[selectedPreset]) return;
+
+                    delete presets[selectedPreset];
+                    updatePresetList();
+                }
+
+                function updatePresetList() {
+                    presetSelect.innerHTML = '<option value="">Select a preset...</option>';
+                    Object.keys(presets).sort().forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        presetSelect.appendChild(option);
+                    });
+                }
+
+                function handleFileSelect(event, trackName) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = async function(e) {
+                        const arrayBuffer = e.target.result;
+                        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                        tracks[trackName].file = audioBuffer;
+
+                        // Update duration to the longest track
+                        duration = Math.max(duration, audioBuffer.duration);
+                        updateTimeDisplay(0, duration);
+
+                        // Enable play button if all tracks are loaded
+                        if (tracks.original.file && tracks.enhanced.file &&
+                            tracks.noise.file && tracks.reverb.file) {
+                            playButton.disabled = false;
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+
+                function updateVolume(trackName, value) {
+                    document.getElementById(`${trackName}VolumeValue`).textContent = `${value}%`;
+                    if (tracks[trackName].gain) {
+                        tracks[trackName].gain.gain.value = value / 100;
+                    }
+                }
+
+                function createTrackSource(trackName, offset = 0) {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = tracks[trackName].file;
+
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = document.getElementById(`${trackName}Volume`).value / 100;
+
+                    source.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    tracks[trackName].source = source;
+                    tracks[trackName].gain = gainNode;
+
+                    return source;
+                }
+
+                function updateTimeDisplay(currentTime, totalTime) {
+                    const formatTime = (time) => {
+                        const minutes = Math.floor(time / 60);
+                        const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+                        return `${minutes}:${seconds}`;
+                    };
+                    document.getElementById('timeDisplay').textContent =
+                        `${formatTime(currentTime)} / ${formatTime(totalTime)}`;
+                }
+
+                function updateScrubberPosition() {
+                    if (!isPlaying) return;
+
+                    const currentTime = audioContext.currentTime - startTime + pausedAt;
+                    scrubber.value = (currentTime / duration) * 1000;
+                    updateTimeDisplay(currentTime, duration);
+
+                    if (currentTime < duration) {
+                        requestAnimationFrame(updateScrubberPosition);
+                    } else {
+                        stopAll();
+                    }
+                }
+
+                function handleScrub() {
+                    if (isPlaying) {
+                        pauseAll();
+                    }
+                    const newTime = (scrubber.value / 1000) * duration;
+                    updateTimeDisplay(newTime, duration);
+                }
+
+                function handleScrubEnd() {
+                    const newTime = (scrubber.value / 1000) * duration;
+                    pausedAt = newTime;
+                    if (isPlaying) {
+                        playAll();
+                    }
+                }
+
+                function playAll() {
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+
+                    stopAllSources();
+
+                    startTime = audioContext.currentTime;
+                    for (const trackName in tracks) {
+                        if (tracks[trackName].file) {
+                            const source = createTrackSource(trackName);
+                            source.start(0, pausedAt);
+                        }
+                    }
+
+                    isPlaying = true;
+                    playButton.disabled = true;
+                    pauseButton.disabled = false;
+                    stopButton.disabled = false;
+                    requestAnimationFrame(updateScrubberPosition);
+                }
+
+                function pauseAll() {
+                    const currentTime = audioContext.currentTime - startTime + pausedAt;
+                    pausedAt = currentTime;
+                    stopAllSources();
+                    isPlaying = false;
+                    playButton.disabled = false;
+                    pauseButton.disabled = true;
+                }
+
+                function stopAllSources() {
+                    for (const trackName in tracks) {
+                        if (tracks[trackName].source) {
+                            tracks[trackName].source.stop();
+                            tracks[trackName].source = null;
+                        }
+                    }
+                }
+
+                function stopAll() {
+                    stopAllSources();
+                    isPlaying = false;
+                    pausedAt = 0;
+                    scrubber.value = 0;
+                    updateTimeDisplay(0, duration);
+                    playButton.disabled = false;
+                    pauseButton.disabled = true;
+                    stopButton.disabled = true;
+                }
+            });
+
+        </script>
+    </body>
+
+</html>
